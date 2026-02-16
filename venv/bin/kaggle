@@ -1,0 +1,8 @@
+#!/bin/sh
+'''exec' "/Volumes/Study and Work/Projects/retail-control-tower/venv/bin/python3" "$0" "$@"
+' '''
+import sys
+from kaggle.cli import main
+if __name__ == '__main__':
+    sys.argv[0] = sys.argv[0].removesuffix('.exe')
+    sys.exit(main())
