@@ -81,7 +81,15 @@ for j in data:
 
 if [[ -n "$JOB_ID" ]]; then
   echo "Updating existing job: $JOB_ID"
-  databricks jobs reset "$JOB_ID" --json @"$TMP_JSON" --profile "$PROFILE"
+  RESET_JSON="$(mktemp)"
+  cat > "$RESET_JSON" <<JSON
+{
+  "job_id": ${JOB_ID},
+  "new_settings": $(cat "$TMP_JSON")
+}
+JSON
+  databricks jobs reset --json @"$RESET_JSON" --profile "$PROFILE"
+  rm -f "$RESET_JSON"
   echo "JOB_ID=$JOB_ID"
 else
   echo "Creating new job: $JOB_NAME"
