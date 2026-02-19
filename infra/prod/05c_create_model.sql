@@ -1,0 +1,5 @@
+USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE RETAIL_DB;
+
+SELECT 'Deprecated: use 07_merge_model.sql for MODEL builds.' AS INFO;

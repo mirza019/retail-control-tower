@@ -1,0 +1,30 @@
+{
+  "name": "retail-control-tower-etl-ml-serverless",
+  "tasks": [
+    {
+      "task_key": "etl_gold_to_snowflake",
+      "notebook_task": {
+        "notebook_path": "/Users/<workspace-user>/retail-control-tower/etl_build_silver_gold_dbx",
+        "base_parameters": {
+          "RAW_PATH": "/Volumes/main/default/retail_raw",
+          "SCOPE": "retail-secrets"
+        }
+      }
+    },
+    {
+      "task_key": "ml_scoring_to_snowflake",
+      "depends_on": [
+        {
+          "task_key": "etl_gold_to_snowflake"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Users/<workspace-user>/retail-control-tower/ml_scoring_dbx",
+        "base_parameters": {
+          "RAW_PATH": "/Volumes/main/default/retail_raw",
+          "SCOPE": "retail-secrets"
+        }
+      }
+    }
+  ]
+}

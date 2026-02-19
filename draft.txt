@@ -1,0 +1,90 @@
+RETAIL CONTROL TOWER PROJECT STATUS
+
+WHAT WE HAVE COMPLETED
+
+1) Snowflake + Databricks Foundation
+- Snowflake CLI and Databricks CLI configured and working.
+- Dev profile (`retail-dev`) is operational.
+- Databricks workspace/job execution verified from CLI.
+- Secrets-based Snowflake credential access is working in Databricks notebooks.
+
+2) Data Pipeline (Working End-to-End)
+- Bronze -> Silver -> Model -> Gold pipeline is implemented and tested.
+- Core SQL flow is in place:
+  - `infra/dev/04_create_layers.sql`
+  - `infra/dev/05_create_bronze_silver_model.sql`
+  - `infra/dev/07_merge_model.sql`
+  - `infra/dev/06_create_gold_views_model_based.sql`
+  - `infra/dev/08_dq_checks_enterprise.sql`
+- Manual Bronze inserts successfully propagated through Silver/Model/Gold.
+- DQ checks passed (row-count, duplicate keys, missing dimension joins).
+
+3) ML Pipeline (Working)
+- Databricks ML train/eval notebook implemented with:
+  - time-based CV,
+  - holdout evaluation,
+  - decile diagnostics,
+  - calibration diagnostics,
+  - champion/challenger registry.
+- Best-performing targeting variant identified (`logreg_calibrated_ext` for lift/precision use case).
+- ML tracking tables are populated:
+  - `RETAIL_DB.ML.MODEL_REGISTRY`
+  - `RETAIL_DB.ML.MODEL_METRICS`
+  - `RETAIL_DB.ML.CUSTOMER_CHURN_SCORE`
+
+4) Contract/Automation Hardening
+- ML table conflict fixed:
+  - legacy scoring now writes to `RETAIL_DB.ML.CUSTOMER_CHURN_SCORE_LEGACY`
+  - train/eval output remains in `RETAIL_DB.ML.CUSTOMER_CHURN_SCORE`
+- One-command post-Bronze orchestration added:
+  - `scripts/run_after_bronze_change.sh` (dev flow)
+  - `scripts/run_after_bronze_change_prod.sh` (prod-style flow)
+
+5) Prod-Style SQL and Deployment Readiness
+- `infra/prod` brought near parity with `infra/dev`:
+  - `01..08` SQL scripts available.
+- Prod pipeline runner added:
+  - `scripts/run_snowflake_pipeline_prod.sh`
+- Prod-style SQL run succeeded (using `retail-dev` profile as stand-in).
+
+6) GitHub Automation
+- CI workflow exists and runs syntax/validation checks.
+- CD workflow added:
+  - dev deploy on push to `main`,
+  - prod deploy via manual dispatch.
+- Databricks workspace deploy script added:
+  - `scripts/deploy_databricks_workspace.sh`
+
+CURRENT STATUS
+
+- Snowflake: Working
+- Databricks: Working
+- ETL: Working end-to-end
+- ML: Working with tracking and model governance tables
+- Dev automation: Working via one-command script
+- Prod-style scripts: Implemented and tested on dev profile
+
+WHAT IS REMAINING
+
+1) Real Production Environment
+- Create real `retail-prod` Snowflake and Databricks profiles.
+- Set real prod job ID and secrets.
+- Run full prod smoke test.
+
+2) Alteryx Integration (Pending)
+- Build Alteryx workflow using Snowflake Gold/ML outputs.
+- Add orchestration step after DQ/ML as needed.
+
+3) Power BI Integration (Pending)
+- Build semantic model and dashboards on Gold + ML tables.
+- Configure refresh orchestration after successful pipeline run.
+
+4) Final Operationalization
+- Add explicit run-log/alerting layer (failure notifications, freshness SLAs).
+- Add latest-run reporting views to avoid mixed historical metrics in dashboards.
+
+PROJECT STAGE
+
+Current phase: Productionization (without Alteryx/Power BI yet).
+Core engineering pipeline is functional and test-proven.
+Remaining work is downstream analytics tooling integration and real prod cutover.

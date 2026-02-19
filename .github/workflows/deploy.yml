@@ -1,0 +1,132 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Deployment target"
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prod
+
+jobs:
+  deploy-dev:
+    if: github.event_name == 'push' || github.event.inputs.target == 'dev'
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_PROFILE: retail-dev
+      DATABRICKS_WORKSPACE_USER: ${{ secrets.DATABRICKS_WORKSPACE_USER_DEV }}
+      DATABRICKS_SECRET_SCOPE: retail-secrets
+      DATABRICKS_ENABLE_ML: "true"
+      DATABRICKS_JOB_ID: ${{ secrets.DATABRICKS_JOB_ID_DEV }}
+      SNOWFLAKE_PROFILE: retail-dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install CLIs
+        run: |
+          python -m pip install --upgrade pip
+          pip install snowflake-cli-labs
+          curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+          echo "$HOME/.databricks/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Databricks profile
+        run: |
+          cat > "$HOME/.databrickscfg" <<EOF
+          [retail-dev]
+          host = ${{ secrets.DATABRICKS_HOST_DEV }}
+          token = ${{ secrets.DATABRICKS_TOKEN_DEV }}
+          EOF
+
+      - name: Configure Snowflake profile
+        run: |
+          mkdir -p "$HOME/.snowflake"
+          cat > "$HOME/.snowflake/config.toml" <<EOF
+          [connections.retail-dev]
+          account = "${{ secrets.SNOWFLAKE_ACCOUNT_DEV }}"
+          user = "${{ secrets.SNOWFLAKE_USER_DEV }}"
+          password = "${{ secrets.SNOWFLAKE_PASSWORD_DEV }}"
+          role = "${{ secrets.SNOWFLAKE_ROLE_DEV }}"
+          warehouse = "${{ secrets.SNOWFLAKE_WAREHOUSE_DEV }}"
+          database = "${{ secrets.SNOWFLAKE_DATABASE_DEV }}"
+          schema = "GOLD"
+          EOF
+
+      - name: Deploy Databricks notebooks/jobs
+        run: |
+          bash scripts/deploy_databricks_workspace.sh "$DATABRICKS_PROFILE"
+          bash databricks/deploy_databricks_job.sh
+
+      - name: Run Snowflake pipeline (dev)
+        run: bash scripts/run_snowflake_pipeline.sh "$SNOWFLAKE_PROFILE"
+
+      - name: Trigger Databricks run (dev)
+        run: bash databricks/run_now.sh
+
+  deploy-prod:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'prod'
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      DATABRICKS_PROFILE: retail-prod
+      DATABRICKS_WORKSPACE_USER: ${{ secrets.DATABRICKS_WORKSPACE_USER_PROD }}
+      DATABRICKS_SECRET_SCOPE: retail-secrets
+      DATABRICKS_ENABLE_ML: "true"
+      DATABRICKS_JOB_ID: ${{ secrets.DATABRICKS_JOB_ID_PROD }}
+      SNOWFLAKE_PROFILE: retail-prod
+      SNOWFLAKE_PROFILE_PROD: retail-prod
+      DATABRICKS_PROFILE_PROD: retail-prod
+      DATABRICKS_JOB_ID_PROD: ${{ secrets.DATABRICKS_JOB_ID_PROD }}
+      RUN_ML_AFTER_SQL_PROD: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install CLIs
+        run: |
+          python -m pip install --upgrade pip
+          pip install snowflake-cli-labs
+          curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+          echo "$HOME/.databricks/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Databricks profile
+        run: |
+          cat > "$HOME/.databrickscfg" <<EOF
+          [retail-prod]
+          host = ${{ secrets.DATABRICKS_HOST_PROD }}
+          token = ${{ secrets.DATABRICKS_TOKEN_PROD }}
+          EOF
+
+      - name: Configure Snowflake profile
+        run: |
+          mkdir -p "$HOME/.snowflake"
+          cat > "$HOME/.snowflake/config.toml" <<EOF
+          [connections.retail-prod]
+          account = "${{ secrets.SNOWFLAKE_ACCOUNT_PROD }}"
+          user = "${{ secrets.SNOWFLAKE_USER_PROD }}"
+          password = "${{ secrets.SNOWFLAKE_PASSWORD_PROD }}"
+          role = "${{ secrets.SNOWFLAKE_ROLE_PROD }}"
+          warehouse = "${{ secrets.SNOWFLAKE_WAREHOUSE_PROD }}"
+          database = "${{ secrets.SNOWFLAKE_DATABASE_PROD }}"
+          schema = "GOLD"
+          EOF
+
+      - name: Deploy Databricks notebooks/jobs
+        run: |
+          bash scripts/deploy_databricks_workspace.sh "$DATABRICKS_PROFILE"
+          bash databricks/deploy_databricks_job.sh
+
+      - name: Run Snowflake + ML prod flow
+        run: bash scripts/run_after_bronze_change_prod.sh

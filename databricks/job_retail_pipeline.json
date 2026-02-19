@@ -4,7 +4,11 @@
     {
       "task_key": "etl_gold_to_snowflake",
       "notebook_task": {
-        "notebook_path": "/Users/iqubal.ewu@gmail.com/retail-control-tower/etl_build_silver_gold_dbx"
+        "notebook_path": "/Users/<workspace-user>/retail-control-tower/etl_build_silver_gold_dbx",
+        "base_parameters": {
+          "RAW_PATH": "/Volumes/main/default/retail_raw",
+          "SCOPE": "retail-secrets"
+        }
       }
     }
   ]
