@@ -6,6 +6,8 @@
 import numpy as np
 import pandas as pd
 import snowflake.connector
+import os
+import sys
 from datetime import datetime, UTC, date
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
@@ -13,8 +15,19 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import roc_auc_score, average_precision_score
 from pyspark.sql import SparkSession
+
+# Databricks Repos execution can start in the databricks/ subfolder; make repo root importable.
+REPO_ROOT = os.path.abspath(os.path.join(os.getcwd(), ".."))
+if os.path.isdir(os.path.join(REPO_ROOT, "ml")) and REPO_ROOT not in sys.path:
+    sys.path.append(REPO_ROOT)
+
+from ml.model_eval_utils import (
+    choose_threshold,
+    decile_diagnostics,
+    eval_metrics,
+    model_score_for_selection,
+)
 
 
 def _secret_or_raise(scope: str, key: str):
@@ -306,43 +319,6 @@ def build_snapshot_dataset(tx: pd.DataFrame, horizon_days: int, active_lookback_
     return ds
 
 
-def eval_metrics(y_true: np.ndarray, y_score: np.ndarray, top_k_fraction: float) -> dict:
-    base_rate = float(np.mean(y_true))
-    if len(np.unique(y_true)) < 2:
-        auc = np.nan
-        pr_auc = np.nan
-    else:
-        auc = float(roc_auc_score(y_true, y_score))
-        pr_auc = float(average_precision_score(y_true, y_score))
-
-    k = max(1, int(len(y_score) * top_k_fraction))
-    top_idx = np.argsort(-y_score)[:k]
-    top_rate = float(np.mean(y_true[top_idx])) if len(top_idx) else 0.0
-
-    return {
-        "auc": auc,
-        "pr_auc": pr_auc,
-        "precision_at_k": top_rate,
-        "lift_at_k": (float(top_rate / base_rate) if base_rate > 0 else np.nan),
-        "positive_rate": base_rate,
-        "sample_size": float(len(y_true)),
-    }
-
-
-def choose_threshold(y_true: np.ndarray, y_score: np.ndarray) -> float:
-    best_t, best_f1 = 0.5, -1.0
-    for t in np.linspace(0.05, 0.95, 19):
-        y_pred = (y_score >= t).astype(int)
-        tp = np.sum((y_pred == 1) & (y_true == 1))
-        fp = np.sum((y_pred == 1) & (y_true == 0))
-        fn = np.sum((y_pred == 0) & (y_true == 1))
-        p = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        r = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = (2 * p * r / (p + r)) if (p + r) > 0 else 0.0
-        if f1 > best_f1:
-            best_f1, best_t = f1, float(t)
-    return best_t
-
 
 def build_model(model_name: str):
     if model_name == "logreg_calibrated":
@@ -415,31 +391,6 @@ def rolling_time_cv(ds_train: pd.DataFrame, min_train_snapshots: int, model_name
 
     return folds, pd.concat(oof_rows, ignore_index=True)
 
-
-def decile_diagnostics(df_split: pd.DataFrame, y_score: np.ndarray) -> pd.DataFrame:
-    tmp = df_split[["snapshot_date", "target_1"]].copy().reset_index(drop=True)
-    tmp["score"] = y_score
-    tmp["decile"] = pd.qcut(tmp["score"], 10, labels=False, duplicates="drop")
-    tmp["decile"] = tmp["decile"].astype(int) + 1
-    out = (
-        tmp.groupby("decile", as_index=False)
-        .agg(
-            min_score=("score", "min"),
-            max_score=("score", "max"),
-            avg_score=("score", "mean"),
-            positive_rate=("target_1", "mean"),
-            sample_size=("target_1", "size"),
-        )
-        .sort_values("decile", ascending=False)
-    )
-    return out
-
-
-def model_score_for_selection(cv_folds: list, holdout_metrics: dict) -> float:
-    cv_lift = np.nanmean([f["metrics"].get("lift_at_k", np.nan) for f in cv_folds])
-    holdout_lift = holdout_metrics.get("lift_at_k", np.nan)
-    holdout_auc = holdout_metrics.get("auc", np.nan)
-    return float((0.5 * cv_lift) + (0.4 * holdout_lift) + (0.1 * holdout_auc))
 
 
 def train_evaluate_candidate(model_name: str, ds_train_cv: pd.DataFrame, ds_holdout: pd.DataFrame):
@@ -825,4 +776,3 @@ print("brier_score:", brier)
 
 
 # COMMAND ----------
-
