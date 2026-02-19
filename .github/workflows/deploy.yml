@@ -67,6 +67,7 @@ jobs:
             echo "database = \"${{ secrets.SNOWFLAKE_DATABASE_DEV }}\""
             echo "schema = \"GOLD\""
           } > "$HOME/.snowflake/config.toml"
+          chmod 600 "$HOME/.snowflake/config.toml"
 
       - name: Deploy Databricks notebooks/jobs
         env:
@@ -139,6 +140,7 @@ jobs:
             echo "database = \"${{ secrets.SNOWFLAKE_DATABASE_PROD }}\""
             echo "schema = \"GOLD\""
           } > "$HOME/.snowflake/config.toml"
+          chmod 600 "$HOME/.snowflake/config.toml"
 
       - name: Deploy Databricks notebooks/jobs
         env:
