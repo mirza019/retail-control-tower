@@ -47,6 +47,13 @@ jobs:
             echo "token = ${{ secrets.DATABRICKS_TOKEN_DEV }}"
           } > "$HOME/.databrickscfg"
 
+      - name: Verify Databricks auth (dev)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_DEV }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_DEV }}
+        run: |
+          databricks current-user me --profile retail-dev || databricks current-user me
+
       - name: Configure Snowflake profile
         run: |
           mkdir -p "$HOME/.snowflake"
@@ -62,6 +69,9 @@ jobs:
           } > "$HOME/.snowflake/config.toml"
 
       - name: Deploy Databricks notebooks/jobs
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_DEV }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_DEV }}
         run: |
           bash scripts/deploy_databricks_workspace.sh "$DATABRICKS_PROFILE"
           bash databricks/deploy_databricks_job.sh
@@ -109,6 +119,13 @@ jobs:
             echo "token = ${{ secrets.DATABRICKS_TOKEN_PROD }}"
           } > "$HOME/.databrickscfg"
 
+      - name: Verify Databricks auth (prod)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_PROD }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_PROD }}
+        run: |
+          databricks current-user me --profile retail-prod || databricks current-user me
+
       - name: Configure Snowflake profile
         run: |
           mkdir -p "$HOME/.snowflake"
@@ -124,6 +141,9 @@ jobs:
           } > "$HOME/.snowflake/config.toml"
 
       - name: Deploy Databricks notebooks/jobs
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_PROD }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_PROD }}
         run: |
           bash scripts/deploy_databricks_workspace.sh "$DATABRICKS_PROFILE"
           bash databricks/deploy_databricks_job.sh
