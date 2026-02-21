@@ -21,8 +21,10 @@ if [[ -z "$WORKSPACE_USER" ]]; then
   exit 1
 fi
 
-ETL_NOTEBOOK_PATH="/Users/${WORKSPACE_USER}/retail-control-tower/etl_build_silver_gold_dbx"
-ML_NOTEBOOK_PATH="/Users/${WORKSPACE_USER}/retail-control-tower/ml_scoring_dbx"
+# Repos-first runtime paths: code executes from Databricks Repo checkout, not /Users imports.
+REPO_BASE_PATH="/Repos/${WORKSPACE_USER}/retail-control-tower/databricks"
+ETL_NOTEBOOK_PATH="${REPO_BASE_PATH}/etl_build_silver_gold_dbx.py"
+ML_NOTEBOOK_PATH="${REPO_BASE_PATH}/ml_scoring_dbx.py"
 
 TMP_JSON="$(mktemp)"
 if [[ "$ENABLE_ML" == "true" ]]; then

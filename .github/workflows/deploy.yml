@@ -74,7 +74,6 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_DEV }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_DEV }}
         run: |
-          bash scripts/deploy_databricks_workspace.sh "$DATABRICKS_PROFILE"
           bash databricks/deploy_databricks_job.sh
 
       - name: Run Snowflake pipeline (dev)
@@ -147,7 +146,6 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_PROD }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_PROD }}
         run: |
-          bash scripts/deploy_databricks_workspace.sh "$DATABRICKS_PROFILE"
           bash databricks/deploy_databricks_job.sh
 
       - name: Run Snowflake + ML prod flow
