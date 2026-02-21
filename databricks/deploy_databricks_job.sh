@@ -11,18 +11,22 @@ fi
 
 PROFILE="${DATABRICKS_PROFILE:-retail-dev}"
 WORKSPACE_USER="${DATABRICKS_WORKSPACE_USER:-}"
+REPO_PATH="${DATABRICKS_REPO_PATH:-}"
 RAW_PATH="${DATABRICKS_RAW_PATH:-/Volumes/main/default/retail_raw}"
 SECRET_SCOPE="${DATABRICKS_SECRET_SCOPE:-retail-secrets}"
 JOB_NAME="${DATABRICKS_JOB_NAME:-retail-control-tower-etl-ml-serverless}"
 ENABLE_ML="${DATABRICKS_ENABLE_ML:-false}"
 
-if [[ -z "$WORKSPACE_USER" ]]; then
-  echo "Set DATABRICKS_WORKSPACE_USER (example: iqubal.ewu@gmail.com)"
-  exit 1
+if [[ -z "$REPO_PATH" ]]; then
+  if [[ -z "$WORKSPACE_USER" ]]; then
+    echo "Set DATABRICKS_REPO_PATH (recommended) or DATABRICKS_WORKSPACE_USER (example: iqubal.ewu@gmail.com)"
+    exit 1
+  fi
+  REPO_PATH="/Repos/${WORKSPACE_USER}/retail-control-tower"
 fi
 
 # Repos-first runtime paths: code executes from Databricks Repo checkout, not /Users imports.
-REPO_BASE_PATH="/Repos/${WORKSPACE_USER}/retail-control-tower/databricks"
+REPO_BASE_PATH="${REPO_PATH}/databricks"
 ETL_NOTEBOOK_PATH="${REPO_BASE_PATH}/etl_build_silver_gold_dbx.py"
 ML_NOTEBOOK_PATH="${REPO_BASE_PATH}/ml_scoring_dbx.py"
 
