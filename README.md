@@ -1,22 +1,22 @@
 # Retail Control Tower
 
-End-to-end retail analytics engineering project using Databricks, Snowflake, and Python.
+End-to-end retail analytics + ML pipeline using Snowflake, Databricks, Python, Power BI, and GitHub Actions.
 
 ## Architecture
 
-Raw CSV files -> Snowflake BRONZE -> typed SILVER -> MODEL star schema -> GOLD KPI views/tables -> BI/ML consumption.
+Raw CSV files -> Snowflake BRONZE -> typed SILVER -> MODEL (facts/dimensions) -> GOLD KPI views/tables -> Databricks ML scoring/training -> Power BI consumption.
 
 Core schemas:
 - `RETAIL_DB.BRONZE`: raw landed data
 - `RETAIL_DB.SILVER`: cleaned and typed operational data
 - `RETAIL_DB.MODEL`: dimensional/fact model
 - `RETAIL_DB.GOLD`: KPI outputs for dashboards
-- `RETAIL_DB.ML`: ML features/scores (planned)
+- `RETAIL_DB.ML`: ML scores, metrics, model registry
 
 ## Repository Layout
 
 - `infra/dev`: canonical SQL pipeline for development
-- `infra/prod`: production SQL placeholders
+- `infra/prod`: production SQL pipeline scripts (mirrors dev flow)
 - `databricks`: Databricks notebooks/scripts and job JSON
 - `spark_jobs`: local PySpark + Snowflake write path
 - `ml`: starter ML modules (feature build, churn, forecast, anomaly)
@@ -93,6 +93,18 @@ snow sql -c retail-dev -f infra/dev/08_dq_checks_enterprise.sql
 snow sql -c retail-dev -f infra/dev/03_dq_checks.sql
 ```
 
+### One-command local rerun after Bronze change
+
+```bash
+bash scripts/run_after_bronze_change.sh
+```
+
+This runs:
+- Snowflake SILVER/MODEL build (`07_merge_model.sql`)
+- Snowflake GOLD build (`06_create_gold_views_model_based.sql`)
+- Snowflake DQ checks
+- Databricks job trigger (if `DATABRICKS_JOB_ID` is set)
+
 ## Local Python Setup
 
 ```bash
@@ -102,11 +114,12 @@ source venv/bin/activate
 
 ## Databricks Notes
 
-- Serverless compute can block Spark connector DML to Snowflake.
-- Current Databricks scripts use Python Snowflake connector writes for compatibility.
-- Use Databricks secrets scope (`retail-secrets` or `jdbc`) for credentials.
+- Serverless compute can block some Spark connector DML patterns to Snowflake.
+- Databricks ML scripts use Python Snowflake connector writes for compatibility.
+- Use Databricks secrets scope (default: `retail-secrets`) for credentials.
+- Job deployment supports Repos-first execution (recommended).
 
-## Current Output
+## Current Output (Implemented)
 
 - Bronze landing tables populated
 - Silver and model layers built with merge logic
@@ -114,13 +127,32 @@ source venv/bin/activate
   - `GOLD.V_KPI_MONTHLY_REVENUE`
   - `GOLD.V_KPI_DAILY_REVENUE`
   - `GOLD.V_KPI_CUSTOMER_RFM`
+- ML outputs available:
+  - `ML.CUSTOMER_CHURN_SCORE`
+  - `ML.CUSTOMER_CHURN_SCORE_LEGACY`
+  - `ML.MODEL_METRICS`
+  - `ML.MODEL_REGISTRY`
 
-## Next Productization Steps
+## Power BI Integration (Current + Recommended)
 
-- Fill `infra/prod` with production equivalents of dev SQL
-- Add Power BI dashboard on GOLD views
-- Add Alteryx workflow consuming Snowflake model/gold data
-- Write ML scores to `RETAIL_DB.ML` and expose in BI
+Recommended Power BI sources in Snowflake:
+- `RETAIL_DB.GOLD.V_KPI_MONTHLY_REVENUE`
+- `RETAIL_DB.GOLD.V_KPI_DAILY_REVENUE`
+- `RETAIL_DB.GOLD.V_KPI_CUSTOMER_RFM`
+- `RETAIL_DB.ML.CUSTOMER_CHURN_SCORE` (optional ML dashboard page)
+- `RETAIL_DB.ML.MODEL_REGISTRY` / `RETAIL_DB.ML.MODEL_METRICS` (model monitoring)
+
+Suggested dashboard pages:
+- Executive revenue trends (daily/monthly KPI views)
+- Customer/RFM segmentation
+- ML monitoring (latest champion model + scores)
+
+## Next Engineering Steps
+
+- Add Snowflake-native orchestration (`TASK` + `STREAM`) for incremental Bronze -> Silver processing
+- Add audit/run-log tables for operational observability
+- Add RBAC/grants scripts for BI/ML consumers
+- Add Power BI scheduled refresh + data freshness KPI
 
 ## GitHub CI/CD
 
@@ -132,7 +164,16 @@ source venv/bin/activate
 Required GitHub Secrets:
 - Dev:
   - `DATABRICKS_HOST_DEV`, `DATABRICKS_TOKEN_DEV`, `DATABRICKS_WORKSPACE_USER_DEV`, `DATABRICKS_JOB_ID_DEV`
+  - `DATABRICKS_REPO_PATH_DEV` (recommended)
+  - `DATABRICKS_ETL_NOTEBOOK_PATH_DEV`, `DATABRICKS_ML_NOTEBOOK_PATH_DEV` (exact Databricks notebook paths; strongest option)
   - `SNOWFLAKE_ACCOUNT_DEV`, `SNOWFLAKE_USER_DEV`, `SNOWFLAKE_PASSWORD_DEV`, `SNOWFLAKE_ROLE_DEV`, `SNOWFLAKE_WAREHOUSE_DEV`, `SNOWFLAKE_DATABASE_DEV`
 - Prod:
   - `DATABRICKS_HOST_PROD`, `DATABRICKS_TOKEN_PROD`, `DATABRICKS_WORKSPACE_USER_PROD`, `DATABRICKS_JOB_ID_PROD`
+  - `DATABRICKS_REPO_PATH_PROD`
+  - `DATABRICKS_ETL_NOTEBOOK_PATH_PROD`, `DATABRICKS_ML_NOTEBOOK_PATH_PROD`
   - `SNOWFLAKE_ACCOUNT_PROD`, `SNOWFLAKE_USER_PROD`, `SNOWFLAKE_PASSWORD_PROD`, `SNOWFLAKE_ROLE_PROD`, `SNOWFLAKE_WAREHOUSE_PROD`, `SNOWFLAKE_DATABASE_PROD`
+
+## Security Notes
+
+- Do not commit `.env`, credentials, tokens, or raw secrets.
+- If credentials were ever exposed in terminal/screenshots/history, rotate them (Snowflake password and Databricks token).
