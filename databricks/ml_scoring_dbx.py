@@ -5,6 +5,7 @@
 
 # Databricks ML scoring notebook/script
 # Produces:
+#   RETAIL_DB.ML.CUSTOMER_CHURN_SCORE
 #   RETAIL_DB.ML.CUSTOMER_CHURN_SCORE_LEGACY
 #   RETAIL_DB.ML.DAILY_REVENUE_ANOMALY
 import pandas as pd
@@ -44,9 +45,11 @@ def _sf_password(scope: str) -> str:
 # Runtime params
 dbutils.widgets.text("RAW_PATH", "/Volumes/main/default/retail_raw")
 dbutils.widgets.text("SCOPE", "retail-secrets")
+dbutils.widgets.text("MODEL_VERSION", "scoring_rfm_v1")
 
 RAW_PATH = dbutils.widgets.get("RAW_PATH")
 SCOPE = dbutils.widgets.get("SCOPE")
+MODEL_VERSION = dbutils.widgets.get("MODEL_VERSION")
 
 
 def sf_conn():
@@ -64,6 +67,18 @@ def ensure_ml_tables(conn):
     cur = conn.cursor()
     try:
         cur.execute("CREATE SCHEMA IF NOT EXISTS RETAIL_DB.ML")
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS RETAIL_DB.ML.CUSTOMER_CHURN_SCORE (
+              CUSTOMER_ID STRING,
+              SNAPSHOT_DATE DATE,
+              CHURN_SCORE NUMBER(9,6),
+              CHURN_LABEL STRING,
+              MODEL_VERSION STRING,
+              SCORED_AT TIMESTAMP_NTZ
+            )
+            """
+        )
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS RETAIL_DB.ML.CUSTOMER_CHURN_SCORE_LEGACY (
@@ -89,6 +104,10 @@ def ensure_ml_tables(conn):
             )
             """
         )
+        # Backward-compatible column evolution if table was created by older versions.
+        cur.execute("ALTER TABLE RETAIL_DB.ML.CUSTOMER_CHURN_SCORE ADD COLUMN IF NOT EXISTS SNAPSHOT_DATE DATE")
+        cur.execute("ALTER TABLE RETAIL_DB.ML.CUSTOMER_CHURN_SCORE ADD COLUMN IF NOT EXISTS MODEL_VERSION STRING")
+        cur.execute("ALTER TABLE RETAIL_DB.ML.CUSTOMER_CHURN_SCORE ADD COLUMN IF NOT EXISTS SCORED_AT TIMESTAMP_NTZ")
         conn.commit()
     finally:
         cur.close()
@@ -157,7 +176,7 @@ def build_txn_base(spark: SparkSession):
     return tx
 
 
-def score_churn(tx) -> pd.DataFrame:
+def score_churn(tx) -> tuple[pd.DataFrame, pd.DataFrame]:
     last_date = tx.agg(Fmax("order_date").alias("maxd")).collect()[0]["maxd"]
 
     rfm = (
@@ -202,8 +221,12 @@ def score_churn(tx) -> pd.DataFrame:
         lambda x: "HIGH" if x >= 0.67 else ("MEDIUM" if x >= 0.34 else "LOW")
     )
     out["SCORED_AT"] = datetime.utcnow()
+    out["SNAPSHOT_DATE"] = pd.to_datetime(last_date).date() if last_date is not None else None
+    out["MODEL_VERSION"] = MODEL_VERSION
 
-    return out[["CUSTOMER_ID", "RECENCY_DAYS", "FREQUENCY", "MONETARY", "CHURN_SCORE", "CHURN_LABEL", "SCORED_AT"]]
+    legacy_cols = ["CUSTOMER_ID", "RECENCY_DAYS", "FREQUENCY", "MONETARY", "CHURN_SCORE", "CHURN_LABEL", "SCORED_AT"]
+    current_cols = ["CUSTOMER_ID", "SNAPSHOT_DATE", "CHURN_SCORE", "CHURN_LABEL", "MODEL_VERSION", "SCORED_AT"]
+    return out[legacy_cols], out[current_cols]
 
 
 def score_daily_anomaly(tx) -> pd.DataFrame:
@@ -234,19 +257,20 @@ def main():
     spark = SparkSession.builder.appName("retail-ml-scoring").getOrCreate()
 
     tx = build_txn_base(spark)
-    churn_df = score_churn(tx)
+    churn_legacy_df, churn_current_df = score_churn(tx)
     anomaly_df = score_daily_anomaly(tx)
 
     conn = sf_conn()
     try:
         ensure_ml_tables(conn)
-        write_df(conn, churn_df, "RETAIL_DB.ML.CUSTOMER_CHURN_SCORE_LEGACY")
+        write_df(conn, churn_current_df, "RETAIL_DB.ML.CUSTOMER_CHURN_SCORE")
+        write_df(conn, churn_legacy_df, "RETAIL_DB.ML.CUSTOMER_CHURN_SCORE_LEGACY")
         write_df(conn, anomaly_df, "RETAIL_DB.ML.DAILY_REVENUE_ANOMALY")
     finally:
         conn.close()
 
     print(
-        f"ML scoring completed. churn_rows={len(churn_df)}, anomaly_rows={len(anomaly_df)}"
+        f"ML scoring completed. churn_rows={len(churn_current_df)}, anomaly_rows={len(anomaly_df)}"
     )
 
 
